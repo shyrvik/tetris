@@ -9,11 +9,12 @@ const WIDTH: usize = 12;
 const HEIGHT: usize = 11;
 const FILL: i8 = 0;
 
-const TOY: i8 = 1;
+const STATIC_TOY: i8 = 1;
+const TOY: i8 = 2;
 const START_PST: usize = 3;
 
-const TIME_UPD: u64 = 300;
-const TIME_KEY: u64 = 40;
+const TIME_UPD: u64 = 400;
+const TIME_KEY: u64 = 80;
 
 const LEFT:Keycode = Keycode::A;
 const RIGHT: Keycode = Keycode::D;
@@ -35,23 +36,30 @@ fn main() {
     let handle_one = thread::spawn(move || {
         loop {
             thread::sleep(Duration::from_millis(TIME_KEY));
+            
+
             let mut pole_k = mutex_arc.lock().unwrap();
             let mut m: u8 = key_status();
             let n = m.clone();
+
             tx.send(n).unwrap(); //send data for thread_2
             
             if m > 0 {
                 global_flag_change(true);
                 clearscreen::clear().expect("Tetris failed");
                 pole_print(update_screen(&mut pole_k, &mut m));
-                global_flag_change(false);
-            }  
+            }
         }
     });
 
     let mutex_arc_2 = Arc::clone(&mutex_pole);
     let handle_two = thread::spawn(move || {
         loop {
+            if global_flag_status() {
+                thread::sleep(Duration::from_millis(500));
+                global_flag_change(false);
+            } 
+
             let force_key: u8 = rx.recv().unwrap();
             if force_key == 4 {
                 global_time_change(force_key);
@@ -67,14 +75,10 @@ fn main() {
             clearscreen::clear().expect("Tetris failed");
             pole_print(update_screen(&mut pole_p, &mut received_key));
             thread::sleep(Duration::from_millis(global_time_status()));
-            if global_flag_status() {
-                thread::sleep(Duration::from_millis(200));
-            } 
-            
             
         }
     });
-    
+   
     handle_one.join().unwrap(); 
     handle_two.join().unwrap(); 
 }
@@ -94,23 +98,33 @@ fn pole_print(pole_step:  Vec<Vec<i8>> ) {
 fn update_screen(vc: &mut Vec<Vec<i8>>,key: &mut u8) -> Vec<Vec<i8>> {
 
     //global_flag_change(false);
+    
 
     'count: for h in 0..(HEIGHT - 1) { //update_pixel height
             
         for w in 0..(WIDTH - 1) { //update_pixel width
             match vc[h][w] {
                 FILL => vc[h][w] = 0,
+                STATIC_TOY => vc[h][w] = 1,
                 TOY => {
                     //println!{"{}", &key};
                     match key {
-                        1 => {vc[h][w] = FILL; vc[h][w-1] = TOY},
-                        2 => {vc[h][w] = FILL; vc[h][w+1] = TOY},
+                        1 => {
+                            if vc[h][w-1] != STATIC_TOY {
+                                vc[h][w] = FILL; vc[h][w-1] = TOY;
+                            }
+                        },
+                        2 => {
+                            if vc[h][w+1] != STATIC_TOY {
+                                vc[h][w] = FILL; vc[h][w+1] = TOY;
+                            }
+                        },
                         _=> {
-                            if vc[h][w] != vc[h+1][w] && h != (HEIGHT - 2) {
+                            if STATIC_TOY != vc[h+1][w] && h != (HEIGHT-2) {
                                 vc[h][w] = FILL;
                                 vc[h+1][w] = TOY;
                             } else {
-                                vc[h][w] = TOY;
+                                vc[h][w] = STATIC_TOY;
                                 toy_flag_change(true);
                             }
                         },
@@ -119,8 +133,8 @@ fn update_screen(vc: &mut Vec<Vec<i8>>,key: &mut u8) -> Vec<Vec<i8>> {
                 },
                 _ => println!("Tetris Failed_update_screen"),
                 }
-            }
         }
+    }
     //global_flag_change(true);
     vc.to_vec()
 }
@@ -143,6 +157,11 @@ fn key_status() -> u8 {
         }
     position
 }
+
+
+
+
+
 
 fn toy_flag_change(value: bool) {
     let mut flag = NEW_TOY_FLAG.lock().unwrap();
