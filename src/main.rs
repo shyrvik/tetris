@@ -3,10 +3,10 @@ use std::time::Duration;
 use clearscreen;
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use std::sync::{Arc, Mutex};
-use std::sync::mpsc;
+//use std::sync::mpsc;
 
-const WIDTH: usize = 13;
-const HEIGHT: usize = 12;
+const WIDTH: usize = 15;
+const HEIGHT: usize = 16;
 const FILL: u8 = 0;
 
 const TOY: u8 = 2;
@@ -14,8 +14,8 @@ const STATIC_TOY: u8 = 1;
 
 const START_PST: u8 = 3;
 
-const TIME_UPD: u64 = 1000;
-const TIME_KEY: u64 = 80;
+const TIME_UPD: u64 = 700;
+const TIME_KEY: u64 = 60;
 
 const LEFT:Keycode = Keycode::Left;
 const RIGHT: Keycode = Keycode::Right;
@@ -38,7 +38,7 @@ fn main() {
     //let (tx, rx) = mpsc::channel();                                //create channel thread_1 tread_2
     let mutex_pole = Arc::new(Mutex::new(vec![vec![FILL;WIDTH];HEIGHT]));
     let mut toy11: Vec<Vec<u8>> = vec![vec![FILL;2];3];
-    toy11[0][1] = 2; toy11[1][0] = 2; toy11[1][1] = 2; toy11 [2][1] = 2;
+    toy11[0][1] = 2; toy11[1][1] = 2; toy11[2][1] = 2; toy11 [1][0] = 2; 
 
     let toy1 = Arc::new(Mutex::new(toy11));
    
@@ -52,21 +52,23 @@ fn main() {
             let mut pole_k = mutex_arc.lock().unwrap();
             let mut num_key: i8 = key_status();     //читаем состояние клавиши
                                                            
-            if global_flag_status() {     // разрешение на віполнение в момент обновления поля
+            if global_flag_status() && toy_flag_status() != true {     // разрешение на віполнение в момент обновления поля
+                loop_flag_change(false);
                 match num_key {
-                    LE | RI  => {
-                        loop_flag_change(false);
+                    LE | RI | ROT  => {
                         clearscreen::clear().expect("Tetris failed");
-                        pole_print(update_screen(&mut pole_k, &mut num_key, &mut toy_k)); //меняем поле после нажатия клавиши сразу
-                        loop_flag_change(true);      
+                        if num_key == ROT {
+                            thread::sleep(Duration::from_millis(TIME_KEY));
+                        }
+                        pole_print(update_screen(&mut pole_k, &mut num_key, &mut toy_k)); //меняем поле после нажатия клавиши сразу      
                     },
-                    ROT => {
-                        loop_flag_change(false);
-                        rotate_toy(&mut toy_k);
+                    DO => {
+                        clearscreen::clear().expect("Tetris failed");
                         pole_print(update_screen(&mut pole_k, &mut num_key, &mut toy_k)); 
-                        loop_flag_change(true);  
+                    }
+                    _=> {
+                        loop_flag_change(true); 
                     },
-                    _=> {global_time_change(1)},
                 }                                    
             }
         }
@@ -86,7 +88,7 @@ fn main() {
 
             if  toy_flag_status() {
                     count = 0;
-                    pole_p[HEIGHT-1][0] = 1;
+                    pole_p[HEIGHT-1][0] = 2;
                     pole_p[HEIGHT-1][1] = START_PST;
                     add_toy_in_pole(&mut pole_p, &mut toy_p, 0, START_PST as usize);
                 toy_flag_change(false);
@@ -95,7 +97,7 @@ fn main() {
                 clearscreen::clear().expect("Tetris failed");
                 pole_print(update_screen(&mut pole_p, &mut received_key, &mut toy_p));
             }
-            if count != HEIGHT {
+            if count != HEIGHT-1 {
                 count += 1;
             } else {count = 0}
             println!("{}", &count);
@@ -107,7 +109,7 @@ fn main() {
 }
 
 fn pole_print(pole_step:  Vec<Vec<u8>> ) {
-        for element_cnt in &pole_step[0..pole_step.len()] {
+        for element_cnt in &pole_step[0..pole_step.len()-1] {
             for y in element_cnt {
                 if *y == 0 {
                     let ch: char = '-';
@@ -120,75 +122,94 @@ fn pole_print(pole_step:  Vec<Vec<u8>> ) {
          println!();
     }
     global_flag_change(true);
-    loop_flag_change(true);
 }
 
 fn update_screen(vc: &mut Vec<Vec<u8>>,key: &mut i8, toy: &mut Vec<Vec<u8>>) -> Vec<Vec<u8>> {
-
     global_flag_change(false);
 
     let mut key_stat: i8 = *key;
-    let mut flag: bool = false;
-    let mut last_toy_height = vc[HEIGHT-1][0] as usize;
-    let mut last_toy_width = vc[HEIGHT-1][1] as usize;
+    let last_toy_height = vc[HEIGHT-1][0] as usize;
+    let last_toy_width = vc[HEIGHT-1][1] as usize;
+
+    let mut flag_undo_add_toy_width: bool = false;
+    let mut flag_undo_add_toy_height: bool = false;
    
     fn clear_toy(vc: &mut  Vec<Vec<u8>>) {
         for h in (0..(HEIGHT-1)).rev() {
-            for w in 0..WIDTH {
+            for w in 1..WIDTH-1 {
                 if vc[h][w] == TOY {
                     vc[h][w] = FILL 
                 }
             }
         }
     }
-    
-    for hg in (0..(HEIGHT-1)).rev() {
-        for wd in 0..WIDTH {
 
-            if vc[hg][wd] == STATIC_TOY && vc[hg-1][wd] == TOY && (key_stat != LE || key_stat != RI) {
-                flag = true; 
-                toy_flag_change(true);
-                loop_flag_change(false);
-            } else if vc[hg][wd] == TOY && hg == (HEIGHT-2) {
-                flag = true; 
-                global_flag_change(false);
-                loop_flag_change(false); 
-            } else if vc[hg][wd] == TOY && wd - 1 == 0 && key_stat == LE {
-                key_stat = 0;
-            } else if  vc[hg][wd] == TOY  && wd + 1 == (WIDTH-1) && key_stat == RI {
-                key_stat = 0;
-            } else if  vc[hg][wd] == TOY && vc[hg][wd+1] == STATIC_TOY && key_stat == RI {
-                key_stat = 0;
-            } else if  vc[hg][wd] == TOY && vc[hg][wd-1] == STATIC_TOY && key_stat == LE {
-                key_stat = 0;
+    fn change_toy_to_static(vc: &mut Vec<Vec<u8>>) {
+        for h in (0..(HEIGHT-1)).rev() {
+            for w in 0..WIDTH {
+                if vc[h][w] == TOY {
+                    vc[h][w] = STATIC_TOY;
+                }
             }
         }
+        toy_flag_change(true);
     }
-                    match key_stat {
-                        LE | RI => {
-                                clear_toy(vc);
-                                let result = ((last_toy_width as i8) + key_stat) as usize;
-                                add_toy_in_pole(vc, toy, last_toy_height, result);
-                                vc[HEIGHT-1][1] = result as u8; 
-                        },
-                        _=> { 
-                            if flag {
-                                for h in (0..(HEIGHT-1)).rev() {
-                                    for w in 0..WIDTH {
-                                        if vc[h][w] == TOY {
-                                            vc[h][w] = STATIC_TOY;
-                                        }
-                                    }
-                                }
-                                toy_flag_change(true);
-                            } else {
-                                clear_toy(vc);
-                                add_toy_in_pole(vc, toy, last_toy_height, last_toy_width);
-                                vc[HEIGHT-1][0] = (last_toy_height as u8) + 1; 
-                            }
-                        },
-                    }
+    
+    'c: for hg in (0..(HEIGHT-1)).rev() {
+        for wd in 1..WIDTH-1 {
+            if vc[hg][wd] == TOY && wd - 1 == 0 && key_stat == LE {
+                key_stat = 6;
+            }
+            if  vc[hg][wd] == TOY  && wd + 1 == (WIDTH-1) && (key_stat == RI || key_stat == ROT)  {
+                key_stat = 6;
+            }
+            if  vc[hg][wd] == TOY && vc[hg][wd+1] == STATIC_TOY && key_stat == RI {
+                key_stat = 6;
+            }
+            if  vc[hg][wd] == TOY && vc[hg][wd-1] == STATIC_TOY && key_stat == LE {
+                key_stat = 6;
+            }
+            if vc[hg][wd] == TOY && hg == (HEIGHT-2) {
+                if key_stat == LE || key_stat == RI {
+                    break 'c;
+                } else {
+                    change_toy_to_static(vc);
+                    flag_undo_add_toy_height = true;
+                }
+            } 
+            if vc[hg][wd] == STATIC_TOY && vc[hg-1][wd] == TOY {
+                if key_stat == LE || key_stat == RI {
+                    break 'c;
+                } else {
+                    change_toy_to_static(vc);
+                    flag_undo_add_toy_height = true;
+                }
+            } 
+        }
+    }
+    match key_stat {
+        LE | RI => {
+            clear_toy(vc);
+            let result = ((last_toy_width as i8) + key_stat) as usize;
+            add_toy_in_pole(vc, toy, last_toy_height - 1, result);
+            vc[HEIGHT-1][1] = result as u8; 
+        },
+        ROT | 6 => {
+            clear_toy(vc);
+            if key_stat == ROT {
+                rotate_toy(toy);
+            }
+            add_toy_in_pole(vc, toy, last_toy_height, last_toy_width);
+        }, 
+        _=> { 
+            clear_toy(vc);
+            add_toy_in_pole(vc, toy, last_toy_height, last_toy_width);
 
+            if flag_undo_add_toy_height != true {
+                vc[HEIGHT-1][0] = (last_toy_height as u8) + 1;
+            } 
+        },
+    }
     vc.to_vec()
 }
 
@@ -196,35 +217,62 @@ fn add_toy_in_pole(vc_upd: &mut Vec<Vec<u8>>, toy_to_add: &mut Vec<Vec<u8>>, cou
     
     let mut vc_height = count_iter.clone();
     let mut vc_width = start_width.clone();
-    //thread::sleep(Duration::from_millis(5000));
+    let vc_upd_reserved = vc_upd.clone();     // clone if pole have STATIC TOY under TOY
     let toy_height: usize = toy_to_add.len() as usize;
     let toy_width: usize = toy_to_add[0].len() as usize;
 
-    for h in 0..toy_height {
+    's:for h in 0..toy_height {
         for w in 0..toy_width {
             if toy_to_add[h][w] != FILL {
+                if vc_upd[vc_height][vc_width] == STATIC_TOY {
+                    *vc_upd = vc_upd_reserved;
+                    break 's;
+                }
                 vc_upd[vc_height][vc_width] = toy_to_add[h][w];
             }
             vc_width += 1;
         }
-        vc_width = vc_width - toy_width;
+        vc_width = start_width;
         vc_height += 1;
     }
 }
 
 fn rotate_toy(rot_toy12: &mut Vec<Vec<u8>>) {
 
-    let mut rot_toy = rot_toy12.clone(); 
+    let rot_toy = rot_toy12.clone(); 
     let height: usize = rot_toy.len() as usize;
     let width: usize = rot_toy[0].len() as usize;
-    let mut arr_toy: Vec<Vec<u8>> = vec![vec![0; height]; width];
+
+    if width < height {
+        rot_toy12.remove(height-1);
+        for w in 0..width {
+            rot_toy12[w].push(0);
+        }
+    } else {
+        rot_toy12.push(vec![0; height]);
+        for h in 0..height {
+            rot_toy12[h].remove(width-1);
+        }
+    }
 
     for h in 0..height {
         for w in 0..width {
-            arr_toy [width - w - 1][height - h - 1] = rot_toy[h][w];
+
+            rot_toy12[width-1-w][height-1-h] = rot_toy[h][w];
         } 
     } 
-    *rot_toy12 = arr_toy;
+
+    if width < height {
+        let arr_toy = rot_toy12.clone(); 
+        let height_new = rot_toy12.len();
+        let width_new = rot_toy12[0].len();
+
+        for h in 0..height_new {
+            for w in 0..width_new {
+                rot_toy12[height_new- 1 - h][width_new- 1 - w] = arr_toy[h][w];
+            } 
+        } 
+    }
 }
 
 fn key_status() -> i8 {
