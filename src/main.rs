@@ -3,9 +3,10 @@ use std::time::Duration;
 use clearscreen;
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use std::sync::{Arc, Mutex};
+use rand::Rng;
 //use std::sync::mpsc;
 
-const WIDTH: usize = 15;
+const WIDTH: usize = 10;
 const HEIGHT: usize = 16;
 const FILL: u8 = 0;
 
@@ -35,12 +36,11 @@ fn main() {
     global_flag_change(true);
     loop_flag_change(true);
     toy_flag_change(true);
-    //let (tx, rx) = mpsc::channel();                                //create channel thread_1 tread_2
+    //let (tx, rx) = mpsc::channel();                                             //create channel thread_1 tread_2
+    
     let mutex_pole = Arc::new(Mutex::new(vec![vec![FILL;WIDTH];HEIGHT]));
-    let mut toy11: Vec<Vec<u8>> = vec![vec![FILL;2];3];
-    toy11[0][1] = 2; toy11[1][1] = 2; toy11[2][1] = 2; toy11 [1][0] = 2; 
 
-    let toy1 = Arc::new(Mutex::new(toy11));
+    let toy1 = Arc::new(Mutex::new(rand_toy()));
    
 
     let toy_arc = Arc::clone(&toy1);
@@ -111,10 +111,14 @@ fn main() {
 fn pole_print(pole_step:  Vec<Vec<u8>> ) {
         for element_cnt in &pole_step[0..pole_step.len()-1] {
             for y in element_cnt {
-                if *y == 0 {
-                    let ch: char = '-';
-                    print!("{}", ch);
-                } else {print!("{:?}", y)}
+                let fill: String = String::from("..");
+                let toy: String = String::from("[]");
+                match *y {
+                    FILL => print!("{}", fill),
+                    STATIC_TOY => print!("{}", toy),
+                    TOY => print!("{}", toy),
+                    _=> {},
+                }
             }
         println!();
         }
@@ -154,7 +158,7 @@ fn update_screen(vc: &mut Vec<Vec<u8>>,key: &mut i8, toy: &mut Vec<Vec<u8>>) -> 
         }
         toy_flag_change(true);
     }
-    
+
     'c: for hg in (0..(HEIGHT-1)).rev() {
         for wd in 1..WIDTH-1 {
             if vc[hg][wd] == TOY && wd - 1 == 0 && key_stat == LE {
@@ -210,6 +214,7 @@ fn update_screen(vc: &mut Vec<Vec<u8>>,key: &mut i8, toy: &mut Vec<Vec<u8>>) -> 
             } 
         },
     }
+    clear_string(vc);
     vc.to_vec()
 }
 
@@ -273,6 +278,46 @@ fn rotate_toy(rot_toy12: &mut Vec<Vec<u8>>) {
             } 
         } 
     }
+}
+
+fn clear_string(vc_upd: &mut Vec<Vec<u8>>) {
+    for mut hg in (0..(HEIGHT-1)).rev() { // проверить все поле
+        's: for wd in 1..WIDTH-1 {
+            if vc_upd[hg][wd] == FILL || vc_upd[hg][wd] ==  TOY {
+                break 's;  // завершить проверку если наткнулись на 0
+            } else if vc_upd[hg][wd] == STATIC_TOY { 
+                if wd == WIDTH - 2 {   // если проверка дошла до конца строки и там Статик_той
+                    for w in 1..WIDTH - 1 {
+                        vc_upd[hg][w] = FILL;
+                    }
+                    for h in (0..hg).rev() { //от текущей строки и до начала массива сместить все статик той на одну позицию вниз
+                        for w in 1..WIDTH-1 {
+                            if vc_upd[h][w] == STATIC_TOY {
+                                vc_upd[h+1][w] = STATIC_TOY;
+                                vc_upd[h][w] = FILL;
+                            }
+                        }
+                    }
+                *&mut hg -= 1 as usize;   //вернутся опять на проверку той же строки после обнуления
+                }
+            }
+        }
+    }
+}
+
+fn rand_toy() -> Vec<Vec<u8>> {
+    let mut rng = rand::thread_rng();                                  //
+
+    let mut toy11: Vec<Vec<u8>> = vec![vec![FILL;2];3];                          // 222
+    toy11[0][1] = TOY; toy11[1][1] = TOY; toy11[2][1] = TOY; toy11[1][0] = TOY;  //  2
+
+    let mut toy12: Vec<Vec<u8>> = vec![vec![FILL;2];3];                          //  22
+    toy12[0][0] = TOY; toy12[1][0] = TOY; toy12[1][1] = TOY; toy12[2][1] = TOY;  //   22
+
+    let toy_arr = [toy11, toy12];
+    let random_index = rng.gen_range(0..toy_arr.len());
+    let toy_value: &Vec<Vec<u8>> = &toy_arr[random_index];
+    toy_value.to_vec()
 }
 
 fn key_status() -> i8 {
