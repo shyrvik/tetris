@@ -17,6 +17,7 @@ const START_PST: u8 = 3;
 
 const TIME_UPD: u64 = 700;
 const TIME_KEY: u64 = 80;
+const TRUE_CHANGE: usize = 3;
 
 const LEFT:Keycode = Keycode::Left;
 const RIGHT: Keycode = Keycode::Right;
@@ -80,7 +81,7 @@ fn main() {
 
         loop {
             thread::sleep(Duration::from_millis(TIME_KEY));
-
+            global_time_change(1);
             let mut toy_k = mutex_toy.lock().unwrap();
             let mut pole_k = mutex_arc.lock().unwrap();
             let mut num_key: i8 = key_status();   //читаем состояние клавиши
@@ -110,18 +111,19 @@ fn main() {
 }
 
 fn pole_print(pole_step:  Vec<Vec<u8>> ) {
-    for n in 0..WIDTH-1 {
-        print!("##");
-    }
-    println!();
+
     for string_cnt in 4..HEIGHT-1 {
+        let end_arr_cnt = WIDTH - 1;
         for y in 0..WIDTH {
-            let fill: String = String::from("''");
+            let fill: String = String::from("' ");
             let toy: String = String::from("[]");
             match pole_step[string_cnt][y] {
                 FILL => {
                     if y == 0 || y == WIDTH-1 {
-                        print!("#");
+                        match y {
+                            0 => print!("<!"),
+                            end_arr_cnt => print!("!>"),
+                        }
                     } else {
                     print!("{}", fill)
                     }
@@ -133,13 +135,19 @@ fn pole_print(pole_step:  Vec<Vec<u8>> ) {
         }
     println!();
     }
-    for n in 0..WIDTH-1 {
-        print!("##");
+    for n in 0..WIDTH {
+        print!("==");
     }
+    println!();
+    for n in 0..WIDTH {
+        print!(r"\/");
+    }
+    println!();
     for _n in 1..5  {
          println!();
     }
     global_flag_change(true);
+    
 }
 
 fn update_screen(vc: &mut Vec<Vec<u8>>,key: &mut i8, toy: &mut Vec<Vec<u8>>) -> Vec<Vec<u8>> {
@@ -148,6 +156,7 @@ fn update_screen(vc: &mut Vec<Vec<u8>>,key: &mut i8, toy: &mut Vec<Vec<u8>>) -> 
     let mut key_stat: i8 = *key;
     let last_toy_height = vc[HEIGHT-1][0] as usize;
     let last_toy_width = vc[HEIGHT-1][1] as usize;
+    let mut last_true_change = vc[HEIGHT-1][2] as usize; 
 
     let mut flag_undo_add_toy_width: bool = false;
     let mut flag_undo_add_toy_height: bool = false;
@@ -175,64 +184,72 @@ fn update_screen(vc: &mut Vec<Vec<u8>>,key: &mut i8, toy: &mut Vec<Vec<u8>>) -> 
 
     'c: for hg in (0..(HEIGHT-1)).rev() {
         for wd in 1..WIDTH-1 {
-            if vc[hg][wd] == TOY && wd - 1 == 0 && key_stat == LE {
-                key_stat = 6;
-            }
-            if  vc[hg][wd] == TOY  && wd + 1 == (WIDTH-1) && (key_stat == RI || key_stat == ROT)  {
-                key_stat = 6;
-            }
-            if  vc[hg][wd] == TOY && vc[hg][wd+1] == STATIC_TOY && key_stat == RI {
-                key_stat = 6;
-            }
-            if  vc[hg][wd] == TOY && vc[hg][wd-1] == STATIC_TOY && key_stat == LE {
-                key_stat = 6;
-            }
             if vc[hg][wd] == TOY && hg == (HEIGHT-2) {
-                if key_stat == LE || key_stat == RI {
-                    break 'c;
-                } else {
+                if key_stat != LE || key_stat != RI {
+                    global_time_change(2);
                     change_toy_to_static(vc);
-                    flag_undo_add_toy_height = true;
                 }
+                flag_undo_add_toy_height = true;
             } 
             if vc[hg][wd] == STATIC_TOY && vc[hg-1][wd] == TOY {
-                if key_stat == LE || key_stat == RI {
-                    break 'c;
-                } else {
+                if key_stat != LE || key_stat != RI {
+                    global_time_change(2);
                     change_toy_to_static(vc);
-                    flag_undo_add_toy_height = true;
                 }
+                flag_undo_add_toy_height = true;
             } 
+            if vc[hg][wd] == TOY && wd - 1 == 0 && key_stat == LE {
+                last_true_change = TRUE_CHANGE;
+            }
+            if  vc[hg][wd] == TOY  && wd + 1 == (WIDTH-1) && key_stat == RI   {
+                last_true_change = TRUE_CHANGE;
+            }
+            if  vc[hg][wd] == TOY && vc[hg][wd+1] == STATIC_TOY && key_stat == RI {
+                last_true_change = TRUE_CHANGE;
+            }
+            if  vc[hg][wd] == TOY && vc[hg][wd-1] == STATIC_TOY && key_stat == LE {
+                last_true_change = TRUE_CHANGE;
+            }
         }
     }
     match key_stat {
         LE | RI => {
-            clear_toy(vc);
-            let result = ((last_toy_width as i8) + key_stat) as usize;
-            add_toy_in_pole(vc, toy, last_toy_height - 1, result);
-            vc[HEIGHT-1][1] = result as u8; 
+            if last_true_change != TRUE_CHANGE {
+                clear_toy(vc);
+                let result = ((last_toy_width as i8) + key_stat) as usize;
+                add_toy_in_pole(vc, toy, last_toy_height - 1, result);
+                vc[HEIGHT-1][1] = result as u8;
+                vc[HEIGHT-1][2] += 1;
+            } 
         },
-        ROT | 6 => {
+        ROT => {
             clear_toy(vc);
             if key_stat == ROT {
                 rotate_toy(toy);
             }
-            add_toy_in_pole(vc, toy, last_toy_height, last_toy_width);
-        }, 
-        _=> { 
+            let result: bool = add_toy_in_pole(vc, toy, last_toy_height, last_toy_width);
+            if result {
+                for n in 0..3 {
+                    rotate_toy(toy);
+                }
+            }
+        },
+        0 | DO => {
+            vc[HEIGHT-1][2] = 0;
             clear_toy(vc);
             add_toy_in_pole(vc, toy, last_toy_height, last_toy_width);
 
             if flag_undo_add_toy_height != true {
                 vc[HEIGHT-1][0] = (last_toy_height as u8) + 1;
             } 
-        },
+        }, 
+        _=> {},
     }
     clear_string(vc);
     vc.to_vec()
 }
 
-fn add_toy_in_pole(vc_upd: &mut Vec<Vec<u8>>, toy_to_add: &mut Vec<Vec<u8>>, count_iter: usize, start_width: usize) {
+fn add_toy_in_pole(vc_upd: &mut Vec<Vec<u8>>, toy_to_add: &mut Vec<Vec<u8>>, count_iter: usize, start_width: usize) -> bool {
     
     let mut vc_height = count_iter.clone();
     let mut vc_width = start_width.clone();
@@ -240,11 +257,14 @@ fn add_toy_in_pole(vc_upd: &mut Vec<Vec<u8>>, toy_to_add: &mut Vec<Vec<u8>>, cou
     let toy_height: usize = toy_to_add.len() as usize;
     let toy_width: usize = toy_to_add[0].len() as usize;
 
+    let mut result: bool = false;
+
     's:for h in 0..toy_height {
         for w in 0..toy_width {
             if toy_to_add[h][w] != FILL {
-                if vc_upd[vc_height][vc_width] == STATIC_TOY {
+                if vc_upd[vc_height][vc_width] == STATIC_TOY || vc_width == WIDTH - 1 {
                     *vc_upd = vc_upd_reserved;
+                    result = true;
                     break 's;
                 }
                 vc_upd[vc_height][vc_width] = toy_to_add[h][w];
@@ -254,6 +274,7 @@ fn add_toy_in_pole(vc_upd: &mut Vec<Vec<u8>>, toy_to_add: &mut Vec<Vec<u8>>, cou
         vc_width = start_width;
         vc_height += 1;
     }
+    result 
 }
 
 fn rotate_toy(rot_toy12: &mut Vec<Vec<u8>>) {
@@ -262,45 +283,35 @@ fn rotate_toy(rot_toy12: &mut Vec<Vec<u8>>) {
     let height: usize = rot_toy.len() as usize;
     let width: usize = rot_toy[0].len() as usize;
 
+    /////////////////////////////////////новій размер для фигурі/////////////////////////////////////
     if width < height {
-        for h in width..height {
+        for h in (width..height).rev() {
             rot_toy12.remove(h);
         }
         for h in 0..width {
-            for w in height..width {
-                rot_toy12[h].push(0);
+            for w in width..height {
+                rot_toy12[h].push(FILL);
             }
         }
     } 
     if width > height {
         for h in height..width {
-            rot_toy12.push(vec![0; height]);
+            rot_toy12.push(vec![0; width]);
         }
         for h in 0..width {
-            for w in height..width {
+            for w in (height..width).rev() {
                 rot_toy12[h].remove(w);
             }
         }
     }
 
-    let height_rot_toy12: usize = rot_toy12.len() as usize;
-    let width_rot_toy12: usize = rot_toy12[0].len() as usize;
+    ///////////////////////////////////////////////////крутим фигуру///////////////////////////////////////
 
     for h in 0..height {
         for w in 0..width {
-            rot_toy12[w][height_rot_toy12 - h - 1] = rot_toy[h][w];
+            rot_toy12[w][height - h - 1] = rot_toy[h][w];
         } 
     } 
-    
-    let clone_rot_toy12 = rot_toy12.clone();
-    if width < height {
-    for h in 0..height_rot_toy12 {
-        for w in 0..width_rot_toy12 {
-            rot_toy12[h][width_rot_toy12 - w - 1] = clone_rot_toy12[h][w];
-        }
-    }
-    }
-    
 }
 
 fn clear_string(vc_upd: &mut Vec<Vec<u8>>) {
@@ -331,19 +342,28 @@ fn clear_string(vc_upd: &mut Vec<Vec<u8>>) {
 fn rand_toy(toy: &mut Vec<Vec<u8>>) {
     let mut rng = rand::thread_rng();                                  //запускаем поток перебора
 
-    let mut toy11: Vec<Vec<u8>> = vec![vec![FILL;3];3];                          // 222
+    let mut toy11: Vec<Vec<u8>> = vec![vec![FILL;2];3];                          // 222
     toy11[0][1] = TOY; toy11[1][1] = TOY; toy11[2][1] = TOY; toy11[1][0] = TOY;  //  2
 
-    let mut toy12: Vec<Vec<u8>> = vec![vec![FILL;3];3];                          //  22
+    let mut toy12: Vec<Vec<u8>> = vec![vec![FILL;2];3];                          //  22
     toy12[0][0] = TOY; toy12[1][0] = TOY; toy12[1][1] = TOY; toy12[2][1] = TOY;  //   22
 
-    let mut toy13: Vec<Vec<u8>> = vec![vec![FILL;3];3];                          //  2
+    let mut toy13: Vec<Vec<u8>> = vec![vec![FILL;2];3];                          //  2
     toy13[0][0] = TOY; toy13[1][0] = TOY; toy13[2][0] = TOY; toy13[2][1] = TOY;  //  222
 
-    let mut toy14: Vec<Vec<u8>> = vec![vec![FILL;4];4];                          //  2
-    toy14[0][0] = TOY; toy14[0][1] = TOY; toy14[0][2] = TOY; toy14[0][3] = TOY;  //  222
+    let mut toy14: Vec<Vec<u8>> = vec![vec![FILL;1];4];                           
+    toy14[0][0] = TOY; toy14[1][0] = TOY; toy14[2][0] = TOY; toy14[3][0] = TOY;  //  2222
 
-    let toy_arr = [toy11, toy14, toy13, toy12];
+    let mut toy15: Vec<Vec<u8>> = vec![vec![FILL;2];3];                          //    2
+    toy15[0][0] = TOY; toy15[1][0] = TOY; toy15[2][0] = TOY; toy15[0][1] = TOY;  //  222
+
+    let mut toy16: Vec<Vec<u8>> = vec![vec![FILL;2];3];                          //   22
+    toy16[0][1] = TOY; toy16[1][1] = TOY; toy16[1][0] = TOY; toy16[2][0] = TOY;  //  22
+
+    let mut toy17: Vec<Vec<u8>> = vec![vec![FILL;2];2];                          //  22
+    toy17[0][0] = TOY; toy17[0][1] = TOY; toy17[1][0] = TOY; toy17[1][1] = TOY;  //  22
+
+    let toy_arr = [toy13, toy14, toy12, toy11, toy15, toy16, toy17];
     let random_index = rng.gen_range(0..toy_arr.len());
     let toy_value: &Vec<Vec<u8>> = &toy_arr[random_index];
 
@@ -354,11 +374,11 @@ fn rand_toy(toy: &mut Vec<Vec<u8>>) {
 
     if height_toy < height {
         for h in height_toy..height {
-            toy.push(vec![FILL; width]);
+            toy.push(vec![FILL; width_toy]);
         }
     }
     if height_toy > height {
-        for h in height..height_toy {
+        for h in (height..height_toy).rev() {
             toy.remove(h);
         }
     }
@@ -369,9 +389,9 @@ fn rand_toy(toy: &mut Vec<Vec<u8>>) {
             }
         }
     }
-    if width_toy > width {
+    if width_toy > width  {
         for h in 0..height {
-            for w in width..width_toy {
+            for w in (width..width_toy).rev() {
                 toy[h].remove(w);
             }
         }
@@ -444,7 +464,7 @@ fn loop_flag_status() -> bool {                         //статус разр�
 
 fn global_time_change(value: i8) {
     let mut time_flag = GLOBAL_TIME_UPD.lock().unwrap();
-    *time_flag = TIME_UPD / value as u64;
+    *time_flag = TIME_UPD * value as u64;
 }
 
 fn global_time_status() -> u64 {
