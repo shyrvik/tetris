@@ -411,7 +411,7 @@ fn key_status() -> i8 {
     let keys: Vec<Keycode> = device_state.get_keys(); //get keys
     let mut position: i8 = 0;
     
-    if device_state.get_keys().len() > 0 { // get position toy
+    if keys.len() > 0 { // get position toy
         match keys[0] {
             LEFT => position += LE,
             RIGHT => position += RI,
