@@ -1,10 +1,11 @@
 use std::thread;
+use std::io;
 use std::time::Duration;
 use clearscreen;
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use std::sync::{Arc, Mutex};
 use rand::Rng;
-use std::sync::mpsc;
+use termios::{Termios, ECHO, ICANON, TCSANOW};
 
 const WIDTH: usize = 11; // don't use WIDTH smallest 5 
 const HEIGHT: usize = 24;
@@ -47,6 +48,10 @@ fn main() {
     global_flag_change(true);
     loop_flag_change(true);
     toy_flag_change(true);
+
+    let mut termios = Termios::from_fd(0).unwrap();
+    termios.c_lflag &= (ECHO | ICANON);
+    termios::tcsetattr(0, TCSANOW, &termios).unwrap(); //off symbol stdin
     
     let mutex_toy = Arc::new(Mutex::new(vec![vec![FILL;2];3]));
     let mutex_pole = Arc::new(Mutex::new(vec![vec![FILL;WIDTH];HEIGHT]));

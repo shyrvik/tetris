@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 chrono = "0.4"
-termion = "2.0.1"
+termios = "0.3.3"
 console = "0.15.5"
 clearscreen = "2.0.1"
 tokio = "1.28.0"
